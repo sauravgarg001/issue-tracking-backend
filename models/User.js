@@ -1,5 +1,24 @@
 const mongoose = require('mongoose');
 
+let notificationSubSchema = new mongoose.Schema({
+    issueId: {
+        type: String,
+        required: true
+    },
+    message: {
+        type: String,
+        required: true
+    },
+    read: {
+        type: Boolean,
+        default: false
+    },
+    createdOn: {
+        type: Date,
+        default: Date.now
+    }
+}, { _id: false });
+
 let userSchema = new mongoose.Schema({
     userId: {
         type: String,
@@ -36,6 +55,7 @@ let userSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
+    notifications: [notificationSubSchema],
     createdOn: {
         type: Date,
         default: Date.now

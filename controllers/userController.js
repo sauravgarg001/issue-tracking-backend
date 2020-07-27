@@ -296,7 +296,7 @@ let userController = {
     getUser: (req, res) => {
 
         delete req.user.userId;
-        logger.error('User Details Fetched', 'User Controller: getUser()', 10);
+        logger.info('User Details Fetched', 'User Controller: getUser()', 10);
         res.status(200);
         res.send(response.generate(false, 'User details fetched', 200, req.user));
     },

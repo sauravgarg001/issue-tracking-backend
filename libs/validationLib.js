@@ -29,11 +29,15 @@ let validationsLib = {
             return false;
         }
     },
-    index: (index) => {
-        if (!isNaN(parseFloat(index))) {
-            return true;
-        } else {
-            return false;
+    status: (status) => {
+        switch (status) {
+            case 'Backlog':
+            case 'In-Progress':
+            case 'In-Test':
+            case 'Done':
+                return true;
+            default:
+                return false;
         }
     }
 }
