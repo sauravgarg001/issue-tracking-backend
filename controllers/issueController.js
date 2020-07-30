@@ -7,8 +7,6 @@ const response = require('../libs/responseLib');
 const logger = require('../libs/loggerLib');
 const validate = require('../libs/validationLib');
 const check = require('../libs/checkLib');
-const token = require('../libs/tokenLib');
-const mail = require('../libs/mailLib');
 
 //Models
 const UserModel = mongoose.model('User');
@@ -88,7 +86,7 @@ let issueController = {
                             assignees.push({ to: mongoose.Types.ObjectId(_id) });
                             if (i == req.body.assignees.length - 1) {
                                 logger.info('All ObjectId Fetched', 'issueController: getAssigneeId()', 5);
-                                req.body.assignees = assignees;
+                                req.body.assigneesIds = assignees;
                                 resolve(req.user.email);
                             }
                         }).catch((err) => {
@@ -107,13 +105,13 @@ let issueController = {
                     title: req.body.title,
                     reporter: _id,
                     description: req.body.description,
-                    assignees: req.body.assignees,
+                    assignees: req.body.assigneesIds,
                 };
 
                 IssueModel.create(newIssue)
                     .then((issue) => {
                         logger.info('Issue Created', 'issueController: createIssue', 10);
-                        resolve(response.generate(false, 'Issue created', 200, { issueId: issue.issueId }));
+                        resolve(issue.issueId);
                     })
                     .catch((err) => {
                         logger.error(err.message, 'issueController: createIssue', 10);
@@ -123,12 +121,54 @@ let issueController = {
             });
         }
 
+        let saveNotification = (issueId) => {
+            return new Promise((resolve, reject) => {
+
+                for (let i = 0; i < req.body.assignees.length; i++) {
+
+                    UserModel.findOneAndUpdate({ email: req.body.assignees[i].to.email }, {
+                            $addToSet: {
+                                notifications: {
+                                    issueId: issueId,
+                                    by: {
+                                        email: req.user.email,
+                                        firstName: req.user.firstName,
+                                        lastName: req.user.lastName
+                                    },
+                                    message: `assigned you new issue with title '${req.body.title}'`
+                                }
+                            },
+                            $set: {
+                                modifiedOn: time.now()
+                            }
+                        }, { new: true }) //To return updated document
+                        .exec()
+                        .then((user) => {
+                            if (check.isEmpty(user)) {
+                                logger.info('No User Found', 'issueController: saveNotification');
+                                reject(response.generate(true, 'Failed to perform action', 404, null));
+                            } else {
+                                logger.info('Notification Saved', 'issueController: saveNotification');
+                                if (i == req.body.assignees.length - 1) {
+                                    resolve(response.generate(false, 'Issue created', 200, { issueId: issueId }));
+                                }
+                            }
+                        })
+                        .catch((err) => {
+                            logger.error(err.message, 'issueController: saveNotification', 10);
+                            reject(response.generate(true, 'Failed to perform action', 500, null));
+                        });
+                }
+            });
+        }
+
         //<--Local Functions End
 
         validateUserInput()
             .then(getAssigneeId)
             .then(getUserObjectId)
             .then(createIssue)
+            .then(saveNotification)
             .then((resolve) => {
                 res.status(resolve.status)
                 res.send(resolve);
@@ -204,7 +244,6 @@ let issueController = {
 
         let validateUserInput = () => {
             return new Promise((resolve, reject) => {
-                console.log(req.body);
                 if (!req.body.issueId) {
 
                     logger.error('Field Missing', 'issueController: validateUserInput()', 5);
@@ -253,10 +292,10 @@ let issueController = {
                                 } else {
                                     assignedOn = time.now();
                                 }
-                                assignees.push({ to: mongoose.Types.ObjectId(_id), assignees: assignedOn });
+                                assignees.push({ to: mongoose.Types.ObjectId(_id), assignedOn: assignedOn });
                                 if (i == req.body.assignees.length - 1) {
                                     logger.info('All ObjectId Fetched', 'issueController: getAssigneeId()', 5);
-                                    req.body.assignees = assignees;
+                                    req.body.assigneesIds = assignees;
                                     resolve();
                                 }
                             }).catch((err) => {
@@ -271,19 +310,111 @@ let issueController = {
             });
         }
 
-        let editIssue = () => {
+        let findIssue = (_id) => {
             return new Promise((resolve, reject) => {
+
+                IssueModel.findOne({ issueId: req.body.issueId, $or: [{ "assignees.to": _id }, { "reporter": _id }] }, { _id: 0, issueId: 1, title: 1, description: 1, reporter: 1, status: 1, assignees: 1, createdOn: 1, modifiedOn: 1 })
+                    .populate('reporter', '-_id email firstName lastName')
+                    .populate('assignees.to', '-_id email firstName lastName')
+                    .then((issue) => {
+                        if (check.isEmpty(issue)) {
+                            logger.error('No Issue Found', 'issueController: findIssue()', 7);
+                            reject(response.generate(true, 'Failed to perform action', 404, null));
+                        } else {
+                            logger.info('Issue Found', 'issueController: findIssue()', 10);
+                            let issueObj = issue.toObject();
+                            resolve(issueObj);
+                        }
+                    })
+                    .catch((err) => {
+                        logger.error(err.message, 'issueController: findIssue()', 10);
+                        reject(response.generate(true, 'Failed to perform action', 500, null));
+                    });
+            });
+        }
+
+        let symmDiff = (oldArray, newArray) => {
+
+            let removedElements = JSON.parse(JSON.stringify(oldArray));
+            let addedElements = JSON.parse(JSON.stringify(newArray));
+
+            for (let i = 0; i < removedElements.length; i++) {
+                for (let j = 0; j < addedElements.length; j++) {
+                    if (removedElements[i].to.email == addedElements[j].to.email) {
+                        removedElements.splice(i, 1);
+                        addedElements.splice(j, 1);
+                        i--;
+                        break;
+                    }
+                }
+            }
+
+            return {
+                removed: removedElements,
+                added: addedElements
+            }
+        }
+
+        let editIssue = (issueObj) => {
+            return new Promise((resolve, reject) => {
+
                 let data = {};
-                if (req.body.title)
-                    data['title'] = req.body.title;
-                if (req.body.description)
-                    data['description'] = req.body.description;
-                if (req.body.status && validate.status(req.body.status))
-                    data['status'] = req.body.status;
-                if (req.body.assignees)
-                    data['assignees'] = req.body.assignees;
+                let message = '';
+                if (req.user.email == issueObj.reporter.email) {
+                    if (req.body.title && req.body.title != issueObj.title) {
+                        data['title'] = req.body.title;
+                        if (message) {
+                            message += ' ';
+                        }
+                        message += `changed title from '${issueObj.title}' to '${req.body.title}'`;
+                    }
+                    if (req.body.description && req.body.description != issueObj.description) {
+                        data['description'] = req.body.description;
+                        if (message) {
+                            message += ' ';
+                        }
+                        message += `changed description from '${issueObj.description}' to '${req.body.description}'`;
+                    }
+                    if (req.body.status && validate.status(req.body.status) && req.body.status != issueObj.status) {
+                        data['status'] = req.body.status;
+                        if (message) {
+                            message += ' ';
+                        }
+                        message += `changed status from '${issueObj.status}' to '${req.body.status}'`;
+                    }
+                }
+                if (req.body.assigneesIds) {
+                    data['assignees'] = req.body.assigneesIds;
+
+                    let { added, removed } = symmDiff(issueObj.assignees, req.body.assignees);
+
+                    if (!check.isEmpty(added)) {
+                        if (message) {
+                            message += ' ';
+                        }
+                        message += 'added assignee(s)';
+                        for (let i = 0; i < added.length; i++) {
+                            message += ` ${added[i].to.firstName} ${added[i].to.lastName}`;
+                            if (i != added.length - 1) {
+                                message += ',';
+                            }
+                        }
+                    }
+                    if (!check.isEmpty(removed)) {
+                        if (message) {
+                            message += ' ';
+                        }
+                        message += 'removed assignee(s)';
+                        for (let i = 0; i < removed.length; i++) {
+                            message += ` ${removed[i].to.firstName} ${removed[i].to.lastName}`;
+                            if (i != removed.length - 1) {
+                                message += ',';
+                            }
+                        }
+                    }
+                }
                 if (check.isEmpty(data)) {
-                    logger.error('Nothing To Update', 'issueController: validateUserInput()', 5);
+                    logger.error('Nothing To Update', 'issueController: editIssue', 5);
                     reject(response.generate(true, 'Nothing to update!', 400, null));
                 } else {
                     data['modifiedOn'] = time.now();
@@ -291,23 +422,76 @@ let issueController = {
                     IssueModel.findOneAndUpdate({ issueId: req.body.issueId }, {
                             $set: data
                         }, { new: true }) //To return updated document
-                        .select('-_id title description reporter status assignees createdOn modifiedOn')
+                        .select('-_id title description reporter status assignees watchers createdOn modifiedOn')
                         .populate('reporter', '-_id email firstName lastName')
+                        .populate('watchers.by', '-_id email')
                         .populate('assignees.to', '-_id email firstName lastName')
                         .exec()
                         .then((issue) => {
                             if (check.isEmpty(issue)) {
-                                logger.info('No Issue Found', 'issueController: editUser');
+                                logger.info('No Issue Found', 'issueController: editIssue');
                                 reject(response.generate(true, 'Failed to perform action', 404, null));
                             } else {
-                                logger.info('Issue Updated', 'issueController: editUser');
-                                resolve(response.generate(false, 'Issue updated', 200, issue));
+                                logger.info('Issue Updated', 'issueController: editIssue');
+                                issue = issue.toObject();
+                                issue['message'] = message;
+                                resolve(issue);
                             }
                         })
                         .catch((err) => {
-                            logger.error(err.message, 'issueController: editUser', 10);
+                            logger.error(err.message, 'issueController: editIssue', 10);
                             reject(response.generate(true, 'Failed to perform action', 500, null));
                         });
+                }
+            });
+
+        }
+
+        let saveNotification = (issueObj) => {
+            return new Promise((resolve, reject) => {
+
+                if (issueObj.watchers.length == 0) {
+                    resolve(response.generate(false, 'Issue updated', 200, issueObj));
+                } else {
+                    for (let i = 0; i < issueObj.watchers.length; i++) {
+
+                        if (issueObj.watchers[i].by.email == req.user.email) {
+                            continue;
+                        }
+                        UserModel.findOneAndUpdate({ email: issueObj.watchers[i].by.email }, {
+                                $addToSet: {
+                                    notifications: {
+                                        issueId: req.body.issueId,
+                                        by: {
+                                            email: req.user.email,
+                                            firstName: req.user.firstName,
+                                            lastName: req.user.lastName
+                                        },
+                                        message: issueObj.message
+                                    }
+                                },
+                                $set: {
+                                    modifiedOn: time.now()
+                                }
+                            }, { new: true }) //To return updated document
+                            .exec()
+                            .then((user) => {
+                                if (check.isEmpty(user)) {
+                                    logger.info('No User Found', 'issueController: saveNotification');
+                                    reject(response.generate(true, 'Failed to perform action', 404, null));
+                                } else {
+                                    logger.info('Notification Saved', 'issueController: saveNotification');
+                                    if (i == issueObj.watchers.length - 1) {
+                                        delete issueObj.watchers;
+                                        resolve(response.generate(false, 'Issue updated', 200, issueObj));
+                                    }
+                                }
+                            })
+                            .catch((err) => {
+                                logger.error(err.message, 'issueController: saveNotification', 10);
+                                reject(response.generate(true, 'Failed to perform action', 500, null));
+                            });
+                    }
                 }
             });
 
@@ -317,7 +501,10 @@ let issueController = {
 
         validateUserInput()
             .then(getAssigneeId)
+            .then(getUserObjectId)
+            .then(findIssue)
             .then(editIssue)
+            .then(saveNotification)
             .then((resolve) => {
                 res.status(resolve.status)
                 res.send(resolve);
@@ -335,10 +522,11 @@ let issueController = {
         let findIssues = () => {
             return new Promise((resolve, reject) => {
 
-                if (!req.query.skip || !Number.isInteger(req.query.skip) || req.query.skip < 0) {
+                let findQuery = {};
+                if (!req.query.skip || isNaN(req.query.skip) || req.query.skip < 0) {
                     req.query.skip = 0;
                 }
-                if (!req.query.limit || !Number.isInteger(req.query.limit) || req.query.limit < 0) {
+                if (!req.query.limit || isNaN(req.query.limit) || req.query.limit < 0) {
                     req.query.limit = 10;
                 }
                 if (!req.query.sort || ![
@@ -347,10 +535,16 @@ let issueController = {
                     ].includes(req.query.sort)) {
                     req.query.sort = 'modifiedOn';
                 }
-                IssueModel.find({}, { _id: 0, issueId: 1, title: 1, description: 1, reporter: 1, status: 1, createdOn: 1, modifiedOn: 1 })
+                if (req.query.searchType && [
+                        'title', 'description', 'status'
+                    ].includes(req.query.searchType) && req.query.search) {
+                    findQuery[req.query.searchType] = { $regex: `${req.query.search}`, $options: 'i' }
+                }
+
+                IssueModel.find(findQuery, { _id: 0, issueId: 1, title: 1, description: 1, reporter: 1, status: 1, createdOn: 1, modifiedOn: 1 })
                     .sort(req.query.sort)
-                    .skip(req.query.skip)
-                    .limit(req.query.limit)
+                    .skip(parseInt(req.query.skip))
+                    .limit(parseInt(req.query.limit))
                     .populate('reporter', '-_id email firstName lastName')
                     .then((issues) => {
                         if (check.isEmpty(issues)) {
@@ -381,6 +575,46 @@ let issueController = {
             });
     },
 
+    getIssuesCount: (req, res) => {
+
+        //Local Function Start-->
+
+        let findIssues = (_id) => {
+            return new Promise((resolve, reject) => {
+
+                let findQuery = {};
+                if (req.query.searchType && [
+                        'title', 'description', 'status'
+                    ].includes(req.query.searchType) && req.query.search) {
+                    findQuery[req.query.searchType] = { $regex: `${req.query.search}`, $options: 'i' }
+                }
+
+                IssueModel.count(findQuery)
+                    .then((count) => {
+                        logger.info('Count Fetched', 'issueController: findIssues()', 10);
+                        resolve(response.generate(false, 'Issues count fetched', 200, count));
+                    })
+                    .catch((err) => {
+                        logger.error(err.message, 'issueController: findIssues()', 10);
+                        reject(response.generate(true, 'Failed to fetch issues count', 500, null));
+                    });
+            });
+        }
+
+        //<--Local Functions End
+
+        getUserObjectId(req.user.email)
+            .then(findIssues)
+            .then((resolve) => {
+                res.status(200);
+                res.send(resolve);
+            })
+            .catch((err) => {
+                res.status(err.status);
+                res.send(err);
+            });
+    },
+
     getIssuesAssigned: (req, res) => {
 
         //Local Function Start-->
@@ -388,10 +622,11 @@ let issueController = {
         let findIssues = (_id) => {
             return new Promise((resolve, reject) => {
 
-                if (!req.query.skip || !Number.isInteger(req.query.skip) || req.query.skip < 0) {
+                let findQuery = { "assignees.to": _id };
+                if (!req.query.skip || isNaN(req.query.skip) || req.query.skip < 0) {
                     req.query.skip = 0;
                 }
-                if (!req.query.limit || !Number.isInteger(req.query.limit) || req.query.limit < 0) {
+                if (!req.query.limit || isNaN(req.query.limit) || req.query.limit < 0) {
                     req.query.limit = 10;
                 }
                 if (!req.query.sort || ![
@@ -400,10 +635,16 @@ let issueController = {
                     ].includes(req.query.sort)) {
                     req.query.sort = 'modifiedOn';
                 }
-                IssueModel.find({ "assignees.to": _id }, { _id: 0, issueId: 1, title: 1, description: 1, reporter: 1, status: 1, createdOn: 1, modifiedOn: 1 })
+                if (req.query.searchType && [
+                        'title', 'description', 'status'
+                    ].includes(req.query.searchType) && req.query.search) {
+                    findQuery[req.query.searchType] = { $regex: `${req.query.search}`, $options: 'i' }
+                }
+
+                IssueModel.find(findQuery, { _id: 0, issueId: 1, title: 1, description: 1, reporter: 1, status: 1, createdOn: 1, modifiedOn: 1 })
                     .sort(req.query.sort)
-                    .skip(req.query.skip)
-                    .limit(req.query.limit)
+                    .skip(parseInt(req.query.skip))
+                    .limit(parseInt(req.query.limit))
                     .populate('reporter', '-_id email firstName lastName')
                     .then((issues) => {
                         if (check.isEmpty(issues)) {
@@ -435,6 +676,46 @@ let issueController = {
             });
     },
 
+    getIssuesAssignedCount: (req, res) => {
+
+        //Local Function Start-->
+
+        let findIssues = (_id) => {
+            return new Promise((resolve, reject) => {
+
+                let findQuery = { "assignees.to": _id };
+                if (req.query.searchType && [
+                        'title', 'description', 'status'
+                    ].includes(req.query.searchType) && req.query.search) {
+                    findQuery[req.query.searchType] = { $regex: `${req.query.search}`, $options: 'i' }
+                }
+
+                IssueModel.count(findQuery)
+                    .then((count) => {
+                        logger.info('Count Fetched', 'issueController: findIssues()', 10);
+                        resolve(response.generate(false, 'Assigned Issues count fetched', 200, count));
+                    })
+                    .catch((err) => {
+                        logger.error(err.message, 'issueController: findIssues()', 10);
+                        reject(response.generate(true, 'Failed to fetch issues count', 500, null));
+                    });
+            });
+        }
+
+        //<--Local Functions End
+
+        getUserObjectId(req.user.email)
+            .then(findIssues)
+            .then((resolve) => {
+                res.status(200);
+                res.send(resolve);
+            })
+            .catch((err) => {
+                res.status(err.status);
+                res.send(err);
+            });
+    },
+
     getIssuesReported: (req, res) => {
 
         //Local Function Start-->
@@ -443,10 +724,12 @@ let issueController = {
 
             return new Promise((resolve, reject) => {
 
-                if (!req.query.skip || !Number.isInteger(req.query.skip) || req.query.skip < 0) {
+                let findQuery = { "reporter": _id };
+
+                if (!req.query.skip || isNaN(req.query.skip) || req.query.skip < 0) {
                     req.query.skip = 0;
                 }
-                if (!req.query.limit || !Number.isInteger(req.query.limit) || req.query.limit < 0) {
+                if (!req.query.limit || isNaN(req.query.limit) || req.query.limit < 0) {
                     req.query.limit = 10;
                 }
                 if (!req.query.sort || ![
@@ -455,11 +738,18 @@ let issueController = {
                     ].includes(req.query.sort)) {
                     req.query.sort = 'modifiedOn';
                 }
-                IssueModel.find({ "reporter": _id }, { _id: 0, issueId: 1, title: 1, description: 1, assignees: 1, status: 1, createdOn: 1, modifiedOn: 1 })
+                if (req.query.searchType && [
+                        'title', 'description', 'status'
+                    ].includes(req.query.searchType) && req.query.search) {
+                    findQuery[req.query.searchType] = { $regex: `${req.query.search}`, $options: 'i' }
+                }
+
+                IssueModel.find(findQuery, { _id: 0, issueId: 1, title: 1, description: 1, assignees: 1, status: 1, createdOn: 1, modifiedOn: 1 })
                     .sort(req.query.sort)
-                    .skip(req.query.skip)
-                    .limit(req.query.limit)
+                    .skip(parseInt(req.query.skip))
+                    .limit(parseInt(req.query.limit))
                     .populate('assignees.to', '-_id email firstName lastName')
+                    .exec()
                     .then((issues) => {
                         if (check.isEmpty(issues)) {
                             logger.error('No Issue Found', 'issueController: findIssues()', 7);
@@ -472,6 +762,46 @@ let issueController = {
                     .catch((err) => {
                         logger.error(err.message, 'issueController: findIssues()', 10);
                         reject(response.generate(true, 'Failed to fetch issues', 500, null));
+                    });
+            });
+        }
+
+        //<--Local Functions End
+
+        getUserObjectId(req.user.email)
+            .then(findIssues)
+            .then((resolve) => {
+                res.status(200);
+                res.send(resolve);
+            })
+            .catch((err) => {
+                res.status(err.status);
+                res.send(err);
+            });
+    },
+
+    getIssuesReportedCount: (req, res) => {
+
+        //Local Function Start-->
+
+        let findIssues = (_id) => {
+            return new Promise((resolve, reject) => {
+
+                let findQuery = { "reporter": _id };
+                if (req.query.searchType && [
+                        'title', 'description', 'status'
+                    ].includes(req.query.searchType) && req.query.search) {
+                    findQuery[req.query.searchType] = { $regex: `${req.query.search}`, $options: 'i' }
+                }
+
+                IssueModel.count(findQuery)
+                    .then((count) => {
+                        logger.info('Count Fetched', 'issueController: findIssues()', 10);
+                        resolve(response.generate(false, 'Assigned Issues count fetched', 200, count));
+                    })
+                    .catch((err) => {
+                        logger.error(err.message, 'issueController: findIssues()', 10);
+                        reject(response.generate(true, 'Failed to fetch issues count', 500, null));
                     });
             });
         }
@@ -769,7 +1099,8 @@ let issueController = {
                         },
                         $set: { modifiedOn: time.now() }
                     }, { new: true }) //To return updated document
-                    .select('-_id comments')
+                    .select('-_id comments watchers')
+                    .populate('watchers.by', '-_id email firstName lastName')
                     .populate('comments.by', '-_id email firstName lastName')
                     .exec()
                     .then((issue) => {
@@ -778,7 +1109,7 @@ let issueController = {
                             reject(response.generate(true, 'Failed to perform action', 404, null));
                         } else {
                             logger.info('Added to comments', 'issueController: addComment');
-                            resolve(response.generate(false, 'Comment saved', 200, issue.comments));
+                            resolve(issue.toObject());
                         }
                     })
                     .catch((err) => {
@@ -789,11 +1120,61 @@ let issueController = {
 
         }
 
+        let saveNotification = (issueObj) => {
+            return new Promise((resolve, reject) => {
+                if (issueObj.watchers.length == 0) {
+                    resolve(response.generate(false, 'Comment saved', 200, issueObj.comments));
+                } else {
+                    for (let i = 0; i < issueObj.watchers.length; i++) {
+
+                        if (issueObj.watchers[i].by.email == req.user.email) {
+                            continue;
+                        }
+                        UserModel.findOneAndUpdate({ email: issueObj.watchers[i].by.email }, {
+                                $addToSet: {
+                                    notifications: {
+                                        issueId: req.body.issueId,
+                                        by: {
+                                            email: req.user.email,
+                                            firstName: req.user.firstName,
+                                            lastName: req.user.lastName
+                                        },
+                                        message: `commented '${req.body.comment}'`
+                                    }
+                                },
+                                $set: {
+                                    modifiedOn: time.now()
+                                }
+                            }, { new: true }) //To return updated document
+                            .exec()
+                            .then((user) => {
+                                if (check.isEmpty(user)) {
+                                    logger.info('No User Found', 'issueController: saveNotification');
+                                    reject(response.generate(true, 'Failed to perform action', 404, null));
+                                } else {
+                                    logger.info('Notification Saved', 'issueController: saveNotification');
+                                    if (i == issueObj.watchers.length - 1) {
+                                        delete issueObj.watchers;
+                                        resolve(response.generate(false, 'Comment saved', 200, issueObj.comments));
+                                    }
+                                }
+                            })
+                            .catch((err) => {
+                                logger.error(err.message, 'issueController: saveNotification', 10);
+                                reject(response.generate(true, 'Failed to perform action', 500, null));
+                            });
+                    }
+                }
+            });
+
+        }
+
         //<--Local Functions End
 
         validateUserInput()
             .then(getUserObjectId)
             .then(addComment)
+            .then(saveNotification)
             .then((resolve) => {
                 res.status(resolve.status)
                 res.send(resolve);
@@ -851,6 +1232,75 @@ let issueController = {
         validateUserInput()
             .then(getUserObjectId)
             .then(findComments)
+            .then((resolve) => {
+                res.status(200);
+                res.send(resolve);
+            })
+            .catch((err) => {
+                res.status(err.status);
+                res.send(err);
+            });
+    },
+
+    markNotificationsAsRead: (req, res) => {
+
+        //Local Function Start-->
+
+        let validateUserInput = () => {
+            return new Promise((resolve, reject) => {
+
+                if (!req.body.issueId) {
+
+                    logger.error('Field Missing', 'issueController: validateUserInput()', 5);
+                    reject(response.generate(true, 'One or More Parameter(s) is missing', 400, null));
+
+                } else {
+
+                    logger.info('User Input Validated', 'issueController: validateUserInput()', 5);
+                    resolve();
+
+                }
+            });
+        }
+
+        let markNotificationsAsRead = () => {
+            return new Promise((resolve, reject) => {
+
+                UserModel.update({
+                        email: req.user.email,
+                        notifications: {
+                            $elemMatch: {
+                                issueId: req.body.issueId,
+                                read: false
+                            }
+                        }
+                    }, {
+                        $set: {
+                            modifiedOn: time.now(),
+                            'notifications.$.read': true
+                        },
+                    })
+                    .then((result) => {
+
+                        if (result.nModified == 0) {
+                            logger.error('No Unread Notifications', 'User Controller: markAllNotificationsAsRead');
+                            reject(response.generate(true, 'No unread notifications for this issue', 404, null));
+                        } else {
+                            logger.info('Notifications Updated', 'User Controller: markAllNotificationsAsRead');
+                            resolve(response.generate(false, 'All notifications marked as read', 200, null));
+                        }
+                    })
+                    .catch((err) => {
+                        logger.error(err.message, 'User Controller:markAllNotificationsAsRead', 10);
+                        reject(response.generate(true, 'Failed to perform action', 500, null));
+                    });
+            });
+        }
+
+        //<--Local Functions End
+
+        validateUserInput()
+            .then(markNotificationsAsRead)
             .then((resolve) => {
                 res.status(200);
                 res.send(resolve);

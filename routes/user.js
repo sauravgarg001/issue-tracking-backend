@@ -169,4 +169,12 @@ router.route('/forgot/password').post(userController.forgotPassword);
   */
 router.route('/change/password').put(userController.changePassword);
 
+router.route('/notifications/all').get(auth.isAuthorized, userController.getNotifications);
+
+router.route('/notifications/all/unread').get(auth.isAuthorized, userController.getUnreadNotifications);
+
+router.route('/notifications/all/unread/mark').put(auth.isAuthorized, userController.markAllNotificationsAsRead);
+
+
+
 module.exports = router;

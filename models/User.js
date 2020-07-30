@@ -5,6 +5,20 @@ let notificationSubSchema = new mongoose.Schema({
         type: String,
         required: true
     },
+    by: {
+        firstName: {
+            type: String,
+            required: true
+        },
+        lastName: {
+            type: String,
+            required: true
+        },
+        email: {
+            type: String,
+            required: true
+        }
+    },
     message: {
         type: String,
         required: true
@@ -28,11 +42,11 @@ let userSchema = new mongoose.Schema({
     },
     firstName: {
         type: String,
-        required: true,
+        required: true
     },
     lastName: {
         type: String,
-        required: true,
+        required: true
     },
     OTP: {
         type: String

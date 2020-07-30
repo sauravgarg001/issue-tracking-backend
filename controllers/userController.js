@@ -498,6 +498,155 @@ let userController = {
                 res.status(err.status);
                 res.send(err);
             });
+    },
+
+    getNotifications: (req, res) => {
+
+        //Local Function Start-->
+
+        let findNotifications = () => {
+            return new Promise((resolve, reject) => {
+
+                if (!req.query.sort || ![
+                        'message', 'read', 'createdOn',
+                        '-message', '-read', '-createdOn',
+                    ].includes(req.query.sort)) {
+                    req.query.sort = '-notifications.createdOn';
+                } else {
+                    if (req.query.sort.charAt(0) == '-') {
+                        req.query.sort = req.query.sort.substring(1);
+                        req.query.sort = `-notifications.${req.query.sort}`;
+                    } else {
+                        req.query.sort = `notifications.${req.query.sort}`;
+                    }
+                }
+
+                UserModel.findOne({ email: req.user.email })
+                    .select('-_id notifications')
+                    .sort(req.query.sort)
+                    .exec()
+                    .then((user) => {
+                        if (check.isEmpty(user)) {
+                            logger.error('No User Found', 'userController: findNotifications()', 7);
+                            reject(response.generate(true, 'Failed to fetch notifications', 404, null));
+                        } else {
+                            logger.info('Notifications Found', 'userController: findNotifications()', 10);
+                            resolve(response.generate(false, 'Notifications fetched', 200, user.notifications));
+                        }
+                    })
+                    .catch((err) => {
+                        logger.error(err.message, 'userController: findNotifications()', 10);
+                        reject(response.generate(true, 'Failed to fetch notifications', 500, null));
+                    });
+            });
+        }
+
+        //<--Local Functions End
+
+        findNotifications()
+            .then((resolve) => {
+                res.status(200);
+                res.send(resolve);
+            })
+            .catch((err) => {
+                res.status(err.status);
+                res.send(err);
+            });
+    },
+
+    getUnreadNotifications: (req, res) => {
+
+        //Local Function Start-->
+
+        let findUnreadNotifications = () => {
+            return new Promise((resolve, reject) => {
+
+                UserModel.aggregate([{
+                            $match: {
+                                email: req.user.email
+                            }
+                        },
+                        {
+                            $project: {
+                                notifications: {
+                                    $filter: {
+                                        input: "$notifications",
+                                        as: "notification",
+                                        cond: { $eq: ["$$notification.read", false] }
+                                    }
+                                }
+                            }
+                        },
+                        {
+                            $sort: {
+                                'notifications.createdOn': -1
+                            }
+                        }
+                    ])
+                    .then((users) => {
+                        if (check.isEmpty(users[0])) {
+                            logger.error('No User Found', 'userController: findUnreadNotifications()', 7);
+                            reject(response.generate(true, 'Failed to fetch notifications', 404, null));
+                        } else {
+                            logger.info('Notifications Found', 'userController: findUnreadNotifications()', 10);
+                            if (users[0].notifications.length == 0) {
+                                users[0].notifications = null;
+                            }
+                            resolve(response.generate(false, 'Notifications fetched', 200, users[0].notifications));
+                        }
+                    })
+                    .catch((err) => {
+                        logger.error(err.message, 'userController: findUnreadNotifications()', 10);
+                        reject(response.generate(true, 'Failed to fetch notifications', 500, null));
+                    });
+            });
+        }
+
+        //<--Local Functions End
+
+        findUnreadNotifications()
+            .then((resolve) => {
+                res.status(200);
+                res.send(resolve);
+            })
+            .catch((err) => {
+                res.status(err.status);
+                res.send(err);
+            });
+    },
+
+    markAllNotificationsAsRead: (req, res) => {
+
+        UserModel.update({
+                email: req.user.email,
+                notifications: {
+                    $elemMatch: {
+                        read: false
+                    }
+                }
+            }, {
+                $set: {
+                    modifiedOn: time.now(),
+                    'notifications.$.read': true
+                },
+            })
+            .then((result) => {
+
+                if (result.nModified == 0) {
+                    logger.info('No Unread Notifications', 'User Controller: markAllNotificationsAsRead');
+                    res.status(400);
+                    res.send(response.generate(true, 'No Unread Notifications', 400, null));
+                } else {
+                    logger.info('Notifications Updated', 'User Controller: markAllNotificationsAsRead');
+                    res.status(200);
+                    res.send(response.generate(false, 'All notifications marked as read', 200, null));
+                }
+            })
+            .catch((err) => {
+                logger.error(err.message, 'User Controller:markAllNotificationsAsRead', 10);
+                res.status(500);
+                res.send(response.generate(true, 'Failed to perform action', 500, null));
+            });
     }
 
 }
