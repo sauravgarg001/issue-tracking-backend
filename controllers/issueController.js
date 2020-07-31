@@ -12,6 +12,9 @@ const check = require('../libs/checkLib');
 const UserModel = mongoose.model('User');
 const IssueModel = mongoose.model('Issue');
 
+//Config
+const appConfig = require('../config/configApp');
+
 //Commom Functions Start-->
 
 let getUserObjectId = (email) => {
@@ -33,6 +36,28 @@ let getUserObjectId = (email) => {
             });
     });
 };
+
+let symmDiffAttachments = (oldArray, newArray) => {
+
+    let removedElements = JSON.parse(JSON.stringify(oldArray));
+    let addedElements = JSON.parse(JSON.stringify(newArray));
+
+    for (let i = 0; i < removedElements.length; i++) {
+        for (let j = 0; j < addedElements.length; j++) {
+            if (removedElements[i] == addedElements[j]) {
+                removedElements.splice(i, 1);
+                addedElements.splice(j, 1);
+                i--;
+                break;
+            }
+        }
+    }
+
+    return {
+        removed: removedElements,
+        added: addedElements
+    }
+}
 
 //<--Commom Functions End
 
@@ -204,7 +229,7 @@ let issueController = {
         let findIssue = () => {
             return new Promise((resolve, reject) => {
 
-                IssueModel.findOne({ issueId: req.query.issueId }, { _id: 0, issueId: 1, title: 1, description: 1, reporter: 1, status: 1, assignees: 1, createdOn: 1, modifiedOn: 1 })
+                IssueModel.findOne({ issueId: req.query.issueId }, { _id: 0, issueId: 1, title: 1, description: 1, reporter: 1, status: 1, assignees: 1, attachments: 1, createdOn: 1, modifiedOn: 1 })
                     .populate('reporter', '-_id email firstName lastName')
                     .populate('assignees.to', '-_id email firstName lastName')
                     .then((issue) => {
@@ -296,7 +321,7 @@ let issueController = {
                                 if (i == req.body.assignees.length - 1) {
                                     logger.info('All ObjectId Fetched', 'issueController: getAssigneeId()', 5);
                                     req.body.assigneesIds = assignees;
-                                    resolve();
+                                    resolve(req.user.email);
                                 }
                             }).catch((err) => {
                                 logger.error('No ObjectId Found', 'issueController: getAssigneeId()', 5);
@@ -305,7 +330,7 @@ let issueController = {
                     }
                 } else {
                     logger.info('No Assignee updated', 'issueController: getAssigneeId()', 5);
-                    resolve();
+                    resolve(req.user.email);
                 }
             });
         }
@@ -333,7 +358,7 @@ let issueController = {
             });
         }
 
-        let symmDiff = (oldArray, newArray) => {
+        let symmDiffAssignees = (oldArray, newArray) => {
 
             let removedElements = JSON.parse(JSON.stringify(oldArray));
             let addedElements = JSON.parse(JSON.stringify(newArray));
@@ -382,11 +407,29 @@ let issueController = {
                         }
                         message += `changed status from '${issueObj.status}' to '${req.body.status}'`;
                     }
+                    if (req.body.attachments) {
+                        let { added, removed } = symmDiffAttachments(issueObj.attachments, req.body.attachments);
+
+                        if (!check.isEmpty(removed)) {
+
+                            if (message) {
+                                message += ' ';
+                            }
+                            message += 'removed attachment(s)';
+                            for (let i = 0; i < removed.length; i++) {
+                                message += ` ${removed[i]}`;
+                                if (i != removed.length - 1) {
+                                    message += ',';
+                                }
+                            }
+                            data['attachments'] = req.body.attachments;
+                        }
+                    }
                 }
                 if (req.body.assigneesIds) {
                     data['assignees'] = req.body.assigneesIds;
 
-                    let { added, removed } = symmDiff(issueObj.assignees, req.body.assignees);
+                    let { added, removed } = symmDiffAssignees(issueObj.assignees, req.body.assignees);
 
                     if (!check.isEmpty(added)) {
                         if (message) {
@@ -422,7 +465,7 @@ let issueController = {
                     IssueModel.findOneAndUpdate({ issueId: req.body.issueId }, {
                             $set: data
                         }, { new: true }) //To return updated document
-                        .select('-_id title description reporter status assignees watchers createdOn modifiedOn')
+                        .select('-_id title description reporter status attachments assignees watchers createdOn modifiedOn')
                         .populate('reporter', '-_id email firstName lastName')
                         .populate('watchers.by', '-_id email')
                         .populate('assignees.to', '-_id email firstName lastName')
@@ -1303,6 +1346,132 @@ let issueController = {
             .then(markNotificationsAsRead)
             .then((resolve) => {
                 res.status(200);
+                res.send(resolve);
+            })
+            .catch((err) => {
+                res.status(err.status);
+                res.send(err);
+            });
+    },
+
+    addAttachments: (req, res) => {
+
+        //Local Function Start-->
+
+        let validateUserInput = () => {
+            return new Promise((resolve, reject) => {
+                if (!req.body.issueId || check.isEmpty(req.files)) {
+
+                    logger.error('Field Missing', 'issueController: validateUserInput()', 5);
+                    reject(response.generate(true, 'Please choose files!', 400, null));
+
+                } else {
+                    console.log(req.files);
+
+                    logger.info('User Input Validated', 'issueController: validateUserInput()', 5);
+                    resolve(req.user.email);
+                }
+            });
+        }
+
+        let addAttachments = (_id) => {
+            return new Promise((resolve, reject) => {
+
+                req.body.message = '';
+                let attachments = Array();
+                for (let i = 0; i < req.files.length; i++) {
+                    req.body.message += req.files[i].filename;
+                    if (i != req.files.length - 1) {
+                        req.body.message += ', ';
+                    }
+                    attachments.push(`${appConfig.url}/uploads/${req.files[i].filename}`);
+                }
+                IssueModel.findOneAndUpdate({ issueId: req.body.issueId }, {
+                        $addToSet: {
+                            attachments: { $each: attachments }
+                        },
+                        $set: { modifiedOn: time.now() }
+                    }, { new: true }) //To return updated document
+                    .select('-_id attachments watchers')
+                    .populate('watchers.by', '-_id email firstName lastName')
+                    .exec()
+                    .then((issue) => {
+                        if (check.isEmpty(issue.attachments)) {
+                            logger.info('No attachments', 'issueController: addAttachments');
+                            reject(response.generate(true, 'Failed to perform action', 404, null));
+                        } else {
+                            logger.info('Added to attachments', 'issueController: addAttachments');
+                            resolve(issue.toObject());
+                        }
+                    })
+                    .catch((err) => {
+                        logger.error(err.message, 'issueController: addAttachments', 10);
+                        reject(response.generate(true, 'Failed to perform action', 500, null));
+                    });
+            });
+
+        }
+
+        let saveNotification = (issueObj) => {
+            return new Promise((resolve, reject) => {
+                if (issueObj.watchers.length == 0) {
+                    resolve(response.generate(false, 'Files uploaded successfully', 200, issueObj.attachments));
+                } else {
+                    for (let i = 0; i < issueObj.watchers.length; i++) {
+
+                        if (issueObj.watchers[i].by.email == req.user.email) {
+                            if (issueObj.watchers.length == 1) {
+                                resolve(response.generate(false, 'Files uploaded successfully', 200, issueObj.attachments));
+                            }
+                            continue;
+                        }
+                        UserModel.findOneAndUpdate({ email: issueObj.watchers[i].by.email }, {
+                                $addToSet: {
+                                    notifications: {
+                                        issueId: req.body.issueId,
+                                        by: {
+                                            email: req.user.email,
+                                            firstName: req.user.firstName,
+                                            lastName: req.user.lastName
+                                        },
+                                        message: `added new attachments '${req.body.message}'`
+                                    }
+                                },
+                                $set: {
+                                    modifiedOn: time.now()
+                                }
+                            }, { new: true }) //To return updated document
+                            .exec()
+                            .then((user) => {
+                                if (check.isEmpty(user)) {
+                                    logger.info('No User Found', 'issueController: saveNotification');
+                                    reject(response.generate(true, 'Failed to perform action', 404, null));
+                                } else {
+                                    logger.info('Notification Saved', 'issueController: saveNotification');
+                                    if (i == issueObj.watchers.length - 1) {
+                                        delete issueObj.watchers;
+                                        resolve(response.generate(false, 'Files uploaded successfully', 200, issueObj.attachments));
+                                    }
+                                }
+                            })
+                            .catch((err) => {
+                                logger.error(err.message, 'issueController: saveNotification', 10);
+                                reject(response.generate(true, 'Failed to perform action', 500, null));
+                            });
+                    }
+                }
+            });
+
+        }
+
+        //<--Local Functions End
+
+        validateUserInput()
+            .then(getUserObjectId)
+            .then(addAttachments)
+            .then(saveNotification)
+            .then((resolve) => {
+                res.status(resolve.status)
                 res.send(resolve);
             })
             .catch((err) => {

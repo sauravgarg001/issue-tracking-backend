@@ -72,6 +72,9 @@ let issueSchema = new mongoose.Schema({
     assignees: [assigneeSubSchema],
     watchers: [watcherSubSchema],
     comments: [commentSubSchema],
+    attachments: [{ //public url of image of format <domain><email>__<original filename>__<createdOn>
+        type: String
+    }],
     createdOn: {
         type: Date,
         default: Date.now
