@@ -132,7 +132,7 @@ let setServer = (server) => {
 
             } else {
                 logger.error("Authentication error", 'issue event', 10);
-                myIo.emit('auth-error@' + authToken, { status: 500, error: 'Authentication error' });
+                socket.emit('auth-error', { status: 500, error: 'Incorrect auth token!' });
             }
         });
         //-------------------------------------------------
@@ -167,7 +167,7 @@ let setServer = (server) => {
 
             } else {
                 logger.error("Authentication error", 'issue event', 10);
-                myIo.emit('auth-error@' + authToken, { status: 500, error: 'Authentication error' });
+                socket.emit('auth-error', { status: 500, error: 'Incorrect auth token!' });
             }
         });
         //-------------------------------------------------
@@ -203,7 +203,7 @@ let setServer = (server) => {
 
             } else {
                 logger.error("Authentication error", 'issue event', 10);
-                myIo.emit('auth-error@' + authToken, { status: 500, error: 'Authentication error' });
+                socket.emit('auth-error', { status: 500, error: 'Incorrect auth token!' });
             }
         });
     });

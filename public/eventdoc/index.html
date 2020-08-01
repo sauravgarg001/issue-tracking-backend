@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0" />
+    <title>Events</title>
+    <!-- CSS  -->
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.1/css/materialize.min.css">
+    <style>
+        /* Custom Stylesheet */
+        
+        .icon-block {
+            padding: 0 15px;
+        }
+        
+        .icon-block .material-icons {
+            font-size: inherit;
+        }
+    </style>
+</head>
+
+<body>
+    <nav class="black lighten-1" role="navigation">
+        <div class="nav-wrapper container">
+            <a id="logo-container" href="#" class="brand-logo" style="font-size:1.6em !important; color: white;"></a>
+            <ul class="right hide-on-med-and-down">
+                <li><a href="../apidoc/">API Docs</a></li>
+            </ul>
+            <ul id="nav-mobile" class="side-nav">
+                <li><a href="../apidoc/">API Docs</a></li>
+            </ul>
+            <a href="#" data-activates="nav-mobile" class="button-collapse"><i class="material-icons">menu</i></a>
+        </div>
+    </nav>
+    <div class="section no-pad-bot" style="margin-bottom: 0px" id="index-banner">
+        <div class="container" style="width: 80%">
+            <p style="font-size: 2em; font-weight: 540; text-align: center">Events documentation</p>
+            <div class="row">
+
+                <div class="col hide-on-small-only m3 l2">
+                    <ul class="section table-of-contents" style="position: fixed;top: 80px;">
+                        <li><a href="#listen" style="color: #03a9f4; font-size: 1.2em; font-weight: bold">Listen</a></li>
+                        <li><a href="#verifyUser">verifyUser</a></li>
+                        <li><a href="#auth-error@">auth-error@</a></li>
+                        <li><a href="#auth-error">auth-error</a></li>
+                        <li><a href="#disconnect">disconnect</a></li>
+                        <li><a href="#issues">issues</a></li>
+                        <li><a href="#issues-assigned">issues-assigned</a></li>
+                        <li><a href="#issues-reported">issues-reported</a></li>
+                        <li><a href="#comments">comments</a></li>
+                        <li><a href="#watchers">watchers</a></li>
+                        <li><a href="#watchers-count">watchers-count</a></li>
+                        <li><a href="#notifications">notifications</a></li>
+                        <li><a href="#emit" style="color: #03a9f4; font-size: 1.2em; font-weight: bold">Emit</a></li>
+                        <li><a href="#set-user">set-user</a></li>
+                        <li><a href="#issue">issue</a></li>
+                        <li><a href="#comment">comment</a></li>
+                        <li><a href="#watcher">watcher</a></li>
+                    </ul>
+                </div>
+
+                <div class="col s12 m9 l10">
+
+                    <div id="listen" class="section scrollspy"></div>
+                    <h4>Events to listen</h4>
+
+                    <div id="verifyUser" class="section scrollspy">
+                        <h5>verifyUser event</h5>
+                        This event <span style="font-weight: 600">("verifyUser")</span> has to be listened on the user's end to verify user authentication.<br/> user will only be set as online user after verification of authentication token.<br/>
+                    </div>
+                    <div id="auth-error@" class="section scrollspy">
+                        <h5>auth-error@&lt;userId&gt; event</h5>
+                        This event <span style="font-weight: 600">("auth-error@&lt;userId&gt;")</span> has to be listened on the user's end to identify authentication error or breach in security.
+                        <br/> The output will error message.
+                    </div>
+                    <div id="auth-error" class="section scrollspy">
+                        <h5>auth-error event</h5>
+                        This event <span style="font-weight: 600">("auth-error")</span> has to be listened on the user's end to identify authentication error or breach in security.
+                        <br/> The output will error message.
+                    </div>
+                    <div id="disconnect" class="section scrollspy">
+                        <h5>disconnect event</h5>
+                        This event <span style="font-weight: 600">("disconnect")</span> has to be listened, when the user is disconnected.<br/>
+                    </div>
+                    <div id="issues" class="section scrollspy">
+                        <h5>issues@&lt;userId&gt; event</h5>
+                        This event <span style="font-weight: 600">("issues@&lt;userId&gt;")</span> has to be listened on the user's end to get notified that issues need to be updated.
+                        <br/> No data passed
+                    </div>
+                    <div id="issues-assigned" class="section scrollspy">
+                        <h5>issues-assigned@&lt;userId&gt; event</h5>
+                        This event <span style="font-weight: 600">("issues-assigned@&lt;userId&gt;")</span> has to be listened on the user's end to get notified that assigned issues need to be updated.
+                        <br/> No data passed
+                    </div>
+                    <div id="issues-reported" class="section scrollspy">
+                        <h5>issues-reported@&lt;userId&gt; event</h5>
+                        This event <span style="font-weight: 600">("issues-reported@&lt;userId&gt;")</span> has to be listened on the user's end to get notified that reported issues need to be updated.
+                        <br/> No data passed
+                    </div>
+                    <div id="comments" class="section scrollspy">
+                        <h5>comments@&lt;userId&gt; event</h5>
+                        This event <span style="font-weight: 600">("comments@&lt;userId&gt;")</span> has to be listened on the user's end to get notified that comments on issue needs to be updated.
+                        <br/> issueId in data is passed
+                    </div>
+                    <div id="watchers" class="section scrollspy">
+                        <h5>watchers@&lt;userId&gt; event</h5>
+                        This event <span style="font-weight: 600">("watchers@&lt;userId&gt;")</span> has to be listened on the user's end to get notified that wathcers of issue need to be updated.
+                        <br/> issueId in data is passed
+                    </div>
+                    <div id="watchers-count" class="section scrollspy">
+                        <h5>watchers-count@&lt;userId&gt; event</h5>
+                        This event <span style="font-weight: 600">("watchers-count@&lt;userId&gt;")</span> has to be listened on the user's end to get notified that issue watchers count need to be updated.
+                        <br/> issueId in data is passed
+                    </div>
+                    <div id="notifications" class="section scrollspy">
+                        <h5>notifications@&lt;userId&gt; event</h5>
+                        This event <span style="font-weight: 600">("notifications@&lt;userId&gt;")</span> has to be listened on the user's end to get notified that notifications need to be updated.
+                        <br/> No data passed
+                    </div>
+
+                    <!-- -------------------------------------------------------------------------------------------------- -->
+                    <div id="emit" class="section scrollspy"></div>
+                    <h4>Events to emit</h4>
+
+                    <div id="set-user" class="section scrollspy">
+                        <h5>set-user event</h5>
+                        This event <span style="font-weight: 600">("set-user")</span> has to be emitted when a user comes online.<br/> User can only be set as online only after verification of authentication token. Which you have pass here. The following
+                        data has to be emitted<br/>
+                        <pre>
+                            {
+                                userId: 'xxTb61m4F',
+                                issueId: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqd3RpZCI6IndNTmtzdnlqQSIsImlhdCI6MTU5Mzk2Njc2NDYyMCwiZXhwIjoxNTk0MDUzMTY0LCJzdWIiOiJhdXRoVG9rZW4iLCJpc3MiOiJpbmN1YkNoYXQiLCJkYXRhIjp7InVzZXJJZCI6Inh4VGI2MW00RiIsImZpcnN0TmFtZSI6IlNhdXJhdiIsImxhc3ROYW1lIjoiR2FyZyIsImVtYWlsIjoic2F1cmF2Z2FyZzAwMUBnbWFpbC5jb20iLCJtb2JpbGVOdW1iZXIiOjc2OTYyNTY0MDAsImxpc3RzIjpbeyJpc0FjdGl2ZSI6dHJ1ZSwiY3JlYXRlZE9uIjoiMjAyMC0wNy0wNVQxMTowODoxNS4xOTVaIiwibW9kaWZpZWRPbiI6IjIwMjAtMDctMDVUMTE6MTA6NDMuMDAwWiIsImxpc3RJZCI6Iml6cEtlYW1oTSIsIm5hbWUiOiJsaXN0IDEifV0sIk9UUCI6IiQyYiQxMCRRMnpYVml5TXhmVDk0UndKRlJYSGxlUWdWbVJ2aklZOFhOay9HMUlVTXVSSnNFUXlrY1g4VyJ9fQ.E28Z1KzTfADn94HBJF2FGbrEraQSvyn3h4tds0vFkHc'
+                            }
+                        </pre>
+                    </div>
+                    <div id="issue" class="section scrollspy">
+                        <h5>issue event</h5>
+                        This event <span style="font-weight: 600">("issue")</span> has to be emitted when a user updates or add issue<br/>The following data has to be emitted<br/>
+                        <pre>
+                            {
+                                userId: 'xxTb61m4F',
+                                issue:
+                                {
+                                    "status": "In-Progress",
+                                    "attachments": [],
+                                    "issueId": "_EZHv_9SU",
+                                    "title": "Test",
+                                    "reporter": {
+                                    "firstName": "abc",
+                                    "lastName": "def",
+                                    "email": "abcdef@gmail.com"
+                                    },
+                                    "description": "&lt;p&gt;abc def&lt;/p&gt;",
+                                    "assignees": [
+                                    {
+                                        "assignedOn": "2020-08-01T11:46:50.811Z",
+                                        "to": {
+                                        "firstName": "xyz",
+                                        "lastName": "mno",
+                                        "email": "xyzmno@gmail.com"
+                                        }
+                                    }
+                                    ],
+                                    "createdOn": "2020-08-01T11:46:50.850Z",
+                                    "modifiedOn": "2020-08-01T11:46:50.850Z",
+                                }
+                            }
+                        </pre>
+                    </div>
+                    <div id="comment" class="section scrollspy">
+                        <h5>comment event</h5>
+                        This event <span style="font-weight: 600">("comment")</span> has to be emitted when a user add comment on issue<br/>The following data has to be emitted<br/>
+                        <pre>
+                            {
+                                userId: 'xxTb61m4F',
+                                issueId: 'mf--X7KiS'
+                            }
+                        </pre>
+                    </div>
+                    <div id="watcher" class="section scrollspy">
+                        <h5>watcher event</h5>
+                        This event <span style="font-weight: 600">("watcher")</span> has to be emitted when a user remove or add watcher from issue<br/>The following data has to be emitted<br/>
+                        <pre>
+                            {
+                                userId: 'xxTb61m4F',
+                                issueId: 'mf--X7KiS'
+                            }
+                        </pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <br/><br/><br/><br/>
+    <footer style="background-color: black; min-height: 3em">
+        <center style="color: white; margin: auto; padding-top: 1em;"></center>
+    </footer>
+    <!--  Scripts-->
+    <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.100.1/js/materialize.min.js"></script>
+    <script type="text/javascript">
+        $(document).ready(function() {
+            $('.scrollspy').scrollSpy();
+        });
+    </script>
+    <script>
+        (function($) {
+            $(function() {
+
+                $('.button-collapse').sideNav();
+
+            }); // end of document ready
+        })(jQuery); // end of jQuery name space
+    </script>
+</body>
+
+</html>

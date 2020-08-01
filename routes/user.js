@@ -169,10 +169,86 @@ router.route('/forgot/password').post(userController.forgotPassword);
   */
 router.route('/change/password').put(userController.changePassword);
 
+/**
+    * @apiGroup users
+    * @apiVersion  1.0.0
+    * @api {get} /api/v1/users/notifications/all to fetch all notification of user.
+    *
+    * @apiParam {string} authToken authToken of user. (query params) (required)
+    * @apiParam {string} sort to sort by specific field. (body params) (optional)
+    *
+    * @apiSuccess {object} myResponse shows error status, message, http status code, result.
+    * 
+    * @apiSuccessExample {object} Success-Response:
+        {
+          data: [{ 
+            by:  { 
+              email: "abcxyz@gmail.com", 
+              firstName: "Abc", 
+              lastName: "Xyz" 
+            }
+            createdOn: "2020-07-30T07:11:22.004Z",
+            issueId: "b0CVMUeKV",
+            message: "abc xyz",
+            read: false
+          },
+          .....
+          ​​],
+          error: false,
+          message: "Notifications fetched",
+          status: 200
+       }
+  */
 router.route('/notifications/all').get(auth.isAuthorized, userController.getNotifications);
 
+/**
+    * @apiGroup users
+    * @apiVersion  1.0.0
+    * @api {get} /api/v1/users/notifications/all/unread to fetch all unread notification of user.
+    *
+    * @apiParam {string} authToken authToken of user. (query params) (required)
+    *
+    * @apiSuccess {object} myResponse shows error status, message, http status code, result.
+    * 
+    * @apiSuccessExample {object} Success-Response:
+        {
+          data: [{ 
+            by:  { 
+              email: "abcxyz@gmail.com", 
+              firstName: "Abc", 
+              lastName: "Xyz" 
+            }
+            createdOn: "2020-07-30T07:11:22.004Z",
+            issueId: "b0CVMUeKV",
+            message: "abc xyz",
+            read: false
+          },
+          .....
+          ​​],
+          error: false,
+          message: "Notifications fetched",
+          status: 200
+       }
+  */
 router.route('/notifications/all/unread').get(auth.isAuthorized, userController.getUnreadNotifications);
 
+/**
+    * @apiGroup users
+    * @apiVersion  1.0.0
+    * @api {put} /api/v1/users/notifications/all/unread/mark to mark all unread notification of user as read.
+    *
+    * @apiParam {string} authToken authToken of user. (body params) (required)
+    *
+    * @apiSuccess {object} myResponse shows error status, message, http status code, result.
+    * 
+    * @apiSuccessExample {object} Success-Response:
+        {
+        "error": false,
+        "message": "All notifications marked as read",
+        "status": 200,
+        "data": null
+      }
+  */
 router.route('/notifications/all/unread/mark').put(auth.isAuthorized, userController.markAllNotificationsAsRead);
 
 
