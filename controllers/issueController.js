@@ -465,7 +465,7 @@ let issueController = {
                     IssueModel.findOneAndUpdate({ issueId: req.body.issueId }, {
                             $set: data
                         }, { new: true }) //To return updated document
-                        .select('-_id title description reporter status attachments assignees watchers createdOn modifiedOn')
+                        .select('-_id issueId title description reporter status attachments assignees watchers createdOn modifiedOn')
                         .populate('reporter', '-_id email firstName lastName')
                         .populate('watchers.by', '-_id email')
                         .populate('assignees.to', '-_id email firstName lastName')
@@ -499,6 +499,9 @@ let issueController = {
                     for (let i = 0; i < issueObj.watchers.length; i++) {
 
                         if (issueObj.watchers[i].by.email == req.user.email) {
+                            if (issueObj.watchers.length == 1) {
+                                resolve(response.generate(false, 'Issue updated', 200, issueObj));
+                            }
                             continue;
                         }
                         UserModel.findOneAndUpdate({ email: issueObj.watchers[i].by.email }, {
@@ -868,7 +871,6 @@ let issueController = {
 
         let validateUserInput = () => {
             return new Promise((resolve, reject) => {
-                console.log(req.body);
                 if (!req.body.issueId) {
 
                     logger.error('Field Missing', 'issueController: validateUserInput()', 5);
@@ -1050,7 +1052,6 @@ let issueController = {
 
         let validateUserInput = () => {
             return new Promise((resolve, reject) => {
-                console.log(req.body);
                 if (!req.query.issueId) {
 
                     logger.error('Field Missing', 'issueController: validateUserInput()', 5);
@@ -1116,7 +1117,6 @@ let issueController = {
 
         let validateUserInput = () => {
             return new Promise((resolve, reject) => {
-                console.log(req.body);
                 if (!req.body.issueId || !req.body.comment) {
 
                     logger.error('Field Missing', 'issueController: validateUserInput()', 5);
@@ -1171,6 +1171,9 @@ let issueController = {
                     for (let i = 0; i < issueObj.watchers.length; i++) {
 
                         if (issueObj.watchers[i].by.email == req.user.email) {
+                            if (issueObj.watchers.length == 1) {
+                                resolve(response.generate(false, 'Comment saved', 200, issueObj.comments));
+                            }
                             continue;
                         }
                         UserModel.findOneAndUpdate({ email: issueObj.watchers[i].by.email }, {
@@ -1366,8 +1369,6 @@ let issueController = {
                     reject(response.generate(true, 'Please choose files!', 400, null));
 
                 } else {
-                    console.log(req.files);
-
                     logger.info('User Input Validated', 'issueController: validateUserInput()', 5);
                     resolve(req.user.email);
                 }

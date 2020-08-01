@@ -226,6 +226,7 @@ let userController = {
                     .catch((err) => {
                         logger.error(err.message, 'userController: saveToken()', 10);
                         req.user = { userId: tokenDetails.userId };
+                        req.user.authError = true;
                         userController.logout(req, res);
                         reject(response.generate(true, 'Failed you may be login somewhere else, Try Again!', 500, null));
                     });
@@ -255,12 +256,16 @@ let userController = {
             .then((result) => {
                 if (check.isEmpty(result)) {
                     logger.info('User already Logged out', 'userController: logout()', 10);
-                    res.status(500);
-                    res.send(response.generate(true, 'Already logged out', 500, null))
+                    if (!req.user.authError) {
+                        res.status(500);
+                        res.send(response.generate(true, 'Already logged out', 500, null))
+                    }
                 } else {
                     logger.info('User Logged out', 'userController: logout()', 10);
-                    res.status(200);
-                    res.send(response.generate(false, 'Logged out successfully', 200, null));
+                    if (!req.user.authError) {
+                        res.status(200);
+                        res.send(response.generate(false, 'Logged out successfully', 200, null));
+                    }
                 }
             })
             .catch((err) => {

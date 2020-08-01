@@ -18,6 +18,7 @@ let isAuthorized = (req, res, next) => {
             .then((auth) => {
                 if (check.isEmpty(auth)) {
                     logger.error('No Authorization Key Is Present', 'Authorization Middleware', 10);
+                    res.status(404);
                     res.send(response.generate(true, 'Session expired', 404, null));
                 } else {
                     token.verifyToken(auth.authToken, auth.tokenSecret)
@@ -28,16 +29,19 @@ let isAuthorized = (req, res, next) => {
                         })
                         .catch((err) => {
                             logger.error(err.message, 'Authorization Middleware', 10);
+                            res.status(500);
                             res.send(response.generate(true, 'Failed to Authorize!', 500, null));
                         })
                 }
             })
             .catch((err) => {
                 logger.error(err.message, 'Authorization Middleware', 10);
+                res.status(500);
                 res.send(response.generate(true, 'Failed to Authorize!', 500, null));
             });
     } else {
         logger.error('Authorization Token Missing', 'AuthorizationMiddleware', 5)
+        res.status(400);
         res.send(response.generate(true, 'Authorization token missing!', 400, null));
     }
 }

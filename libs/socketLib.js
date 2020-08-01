@@ -1,18 +1,14 @@
 const socketio = require('socket.io');
 const mongoose = require('mongoose');
-const shortid = require('shortid');
-const events = require('events');
-
-const eventEmitter = new events.EventEmitter();
 
 //Libraries
 const token = require("./tokenLib");
 const redis = require("./redisLib");
 const check = require("./checkLib");
-const time = require("./timeLib");
+const logger = require("./loggerLib");
 
 //Models
-const UserModel = mongoose.model('User');
+const IssueModel = mongoose.model('Issue');
 
 let setServer = (server) => {
 
@@ -47,7 +43,7 @@ let setServer = (server) => {
 
                             let timeout = 0;
                             if (result[key]) { //check whether user is already logged somewhere
-                                myIo.emit('auth-error@' + result[key], { status: 500, error: 'Already logged somewhere!' });
+                                myIo.emit('auth-error@' + result[key], { status: 500, error: 'Already logged somewhere!', authToken: authToken });
                                 timeout = 500;
                             }
 
@@ -61,17 +57,17 @@ let setServer = (server) => {
                                         socket.join(socket.room)
                                     })
                                     .catch((err) => {
-                                        console.log(err);
+                                        logger.error(err, 'set-user event: setANewOnlineUserInHash', 10);
                                     });
 
                             }, timeout);
 
                         })
                         .catch((err) => {
-                            console.log(err);
+                            logger.error(err, 'set-user event: getAllUsersInAHash', 10);
                         });
                 }).catch((err) => {
-                    console.log("Authentication error:" + err);
+                    logger.error(("Authentication error:" + err), 'set-user event: verifyTokenFromDatabase', 10);
                     socket.emit('auth-error', { status: 500, error: 'Incorrect auth token!' });
                 });
         });
@@ -82,6 +78,151 @@ let setServer = (server) => {
                 redis.deleteUserFromHash('onlineUsers', socket.email);
             }
         });
+        //-------------------------------------------------
+        socket.on('issue', (data) => {
+
+            let issue = data.issue;
+            if (data.userId == socket.userId) {
+
+                redis.getAllUsersInAHash('onlineUsers')
+                    .then((result) => {
+
+                        //issues-assigned event emit for assignees
+                        if (!check.isEmpty(issue.assignees)) {
+                            for (let i = 0; i < issue.assignees.length; i++) {
+                                if (result[issue.assignees[i].to.email]) {
+                                    socket.to(socket.room).broadcast.emit('issues-assigned@' + result[issue.assignees[i].to.email]);
+                                }
+                            }
+                        } else {
+                            logger.error('No assignees', 'issue event', 10);
+                        }
+
+                        //issues-reported event emit for reporter
+                        if (!check.isEmpty(issue.reporter)) {
+                            if (result[issue.reporter.email]) {
+                                socket.to(socket.room).broadcast.emit('issues-reported@' + result[issue.reporter.email]);
+                            }
+                        } else {
+                            logger.error('No reported', 'issue event', 10);
+                        }
+
+                        //issues and issue event emit for all users
+                        for (const userId of Object.values(result)) {
+                            socket.to(socket.room).broadcast.emit('issues@' + userId);
+                            socket.to(socket.room).broadcast.emit('issue@' + userId, { issueId: issue.issueId });
+                        }
+
+                        //notifications event emit for watchers
+                        getWatchers(issue.issueId)
+                            .then((watchers) => {
+                                for (const watcher of watchers) {
+                                    if (watcher.by.email != socket.email && result[watcher.by.email]) {
+                                        socket.to(socket.room).broadcast.emit('notifications@' + result[watcher.by.email]);
+                                    }
+                                }
+                            })
+                            .catch((err) => {
+                                logger.error(err, 'issue event: getWatchers', 10);
+                            });
+                    })
+                    .catch((err) => {
+                        logger.error(err, 'issue event: getAllUsersInAHash', 10);
+                    });
+
+            } else {
+                logger.error("Authentication error", 'issue event', 10);
+                myIo.emit('auth-error@' + authToken, { status: 500, error: 'Authentication error' });
+            }
+        });
+        //-------------------------------------------------
+        socket.on('comment', (data) => {
+            let issueId = data.issueId;
+            if (data.userId == socket.userId) {
+
+                redis.getAllUsersInAHash('onlineUsers')
+                    .then((result) => {
+
+                        //comments event emit for all users
+                        for (const userId of Object.values(result)) {
+                            socket.to(socket.room).broadcast.emit('comments@' + userId, { issueId: issueId });
+                        }
+
+                        //notifications event emit for watchers
+                        getWatchers(issueId)
+                            .then((watchers) => {
+                                for (const watcher of watchers) {
+                                    if (watcher.by.email != socket.email && result[watcher.by.email]) {
+                                        socket.to(socket.room).broadcast.emit('notifications@' + result[watcher.by.email]);
+                                    }
+                                }
+                            })
+                            .catch((err) => {
+                                logger.error(err, 'issue event: getWatchers', 10);
+                            });
+                    })
+                    .catch((err) => {
+                        logger.error(err, 'issue event: getAllUsersInAHash', 10);
+                    });
+
+            } else {
+                logger.error("Authentication error", 'issue event', 10);
+                myIo.emit('auth-error@' + authToken, { status: 500, error: 'Authentication error' });
+            }
+        });
+        //-------------------------------------------------
+        socket.on('watcher', (data) => {
+            let issueId = data.issueId;
+            if (data.userId == socket.userId) {
+
+                redis.getAllUsersInAHash('onlineUsers')
+                    .then((result) => {
+
+                        //watchers-count event emit for all users
+                        for (const userId of Object.values(result)) {
+                            socket.to(socket.room).broadcast.emit('watchers-count@' + userId, { issueId: issueId });
+                        }
+
+                        //watchers event emit for watchers
+                        getWatchers(issueId)
+                            .then((watchers) => {
+
+                                for (const watcher of watchers) {
+                                    if (result[watcher.by.email]) {
+                                        socket.to(socket.room).broadcast.emit('watchers@' + result[watcher.by.email], { issueId: issueId });
+                                    }
+                                }
+                            })
+                            .catch((err) => {
+                                logger.error(err, 'issue event: getWatchers', 10);
+                            });
+                    })
+                    .catch((err) => {
+                        logger.error(err, 'issue event: getAllUsersInAHash', 10);
+                    });
+
+            } else {
+                logger.error("Authentication error", 'issue event', 10);
+                myIo.emit('auth-error@' + authToken, { status: 500, error: 'Authentication error' });
+            }
+        });
+    });
+}
+
+/* Database operations are kept outside of socket.io code. */
+let getWatchers = (issueId) => {
+    return new Promise((resolve, reject) => {
+        IssueModel.findOne({ issueId: issueId })
+            .select('-_id watchers')
+            .populate('watchers.by', '-_id email firstName lastName')
+            .then((user) => {
+                user = user.toObject();
+                console.log(user);
+
+                resolve(user.watchers);
+            }).catch((err) => {
+                reject(err.message);
+            });
     });
 }
 
